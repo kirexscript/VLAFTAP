@@ -1,0 +1,2995 @@
+-- VSA - Visual Script Avacado
+-- Anime / Sakura Edition
+-- Client-side visual effects for Roblox FTAP
+-- UI Library: Ne3lodei Null UI / ChlorineUI (pastebin.com/raw/9Tj3h6n9)
+
+local ok, err = pcall(function()
+    local UI = loadstring(game:HttpGet("https://pastebin.com/raw/9Tj3h6n9"))()
+
+    local Players = game:GetService("Players")
+    local Lighting = game:GetService("Lighting")
+    local RunService = game:GetService("RunService")
+    local UserInputService = game:GetService("UserInputService")
+    local TweenService = game:GetService("TweenService")
+    local HttpService = game:GetService("HttpService")
+    local Stats = game:GetService("Stats")
+    local CoreGui = game:GetService("CoreGui")
+
+    local Player = Players.LocalPlayer
+    local PlayerGui = Player:WaitForChild("PlayerGui")
+    local Camera = workspace.CurrentCamera
+    local Random = Random.new()
+
+    --==========================================================
+    -- COLORS AND STATE
+    --==========================================================
+
+    local C = {
+        Sakura = Color3.fromRGB(255, 135, 195),
+        Pink = Color3.fromRGB(255, 105, 180),
+        LightPink = Color3.fromRGB(255, 195, 220),
+        Gold = Color3.fromRGB(255, 210, 135),
+        Lavender = Color3.fromRGB(190, 145, 255),
+        Midnight = Color3.fromRGB(100, 130, 255),
+        Neon = Color3.fromRGB(0, 255, 220),
+        White = Color3.fromRGB(255, 245, 250),
+        Green = Color3.fromRGB(135, 255, 180)
+    }
+
+    local state = {
+        allFX = true,
+        menuHidden = false,
+        floatingButton = true,
+        hudEnabled = true,
+
+        aura = false,
+        auraRainbow = false,
+        auraColor = C.Sakura,
+        auraTransparency = 0.55,
+        auraSize = 5,
+
+        sakura = false,
+        sakuraCount = 14,
+        sakuraColor = C.LightPink,
+        sakuraSpeed = 1,
+
+        wings = false,
+        wingsRainbow = false,
+        wingsColor = C.Sakura,
+
+        accessories = false,
+        accessoryStyle = "Sakura Pins",
+        accessoryColor = C.Sakura,
+        accessoryRainbow = false,
+        accessorySway = true,
+
+        halo = false,
+        haloRainbow = true,
+        haloColor = C.Gold,
+
+        hearts = false,
+        heartsColor = C.Sakura,
+
+        runes = false,
+        runesColor = C.Lavender,
+
+        galaxy = false,
+        galaxyColor = C.Midnight,
+
+        afterimage = false,
+        afterimageColor = C.LightPink,
+
+        trail = false,
+        trailRainbow = false,
+        trailColor = C.Sakura,
+        trailLifetime = 1.5,
+
+        outline = false,
+        outlineRainbow = false,
+        outlineColor = C.Sakura,
+
+        speedHUD = false,
+        jumpIndicator = false,
+        landingEffect = false,
+        effectScale = 1,
+
+        fog = false,
+        fogColor = Lighting.FogColor,
+        fogStart = Lighting.FogStart,
+        fogEnd = Lighting.FogEnd,
+
+        bloom = false,
+        bloomIntensity = 0.5,
+        bloomSize = 24,
+
+        colorCorrection = false,
+        brightness = 0.03,
+        contrast = 0.08,
+        saturation = 0.15,
+
+        pallets = false,
+        palletsRainbow = false,
+        palletColor = Color3.fromRGB(255, 0, 0),
+        palletSpeed = 0.15,
+
+        lines = false,
+        linesRainbow = false,
+        lineColor = Color3.fromRGB(0, 170, 255),
+        lineSpeed = 0.12,
+
+        thirdPerson = false,
+        minZoom = 0.5,
+        maxZoom = 1000,
+        fov = 70
+    }
+
+    -- Startup safety: remove leftover VSA visual effects from a previous execution.
+    pcall(function()
+        local oldNames = {
+            VSA_Accessories = true, VSA_Aura = true, VSA_Sakura = true,
+            VSA_Wings = true, VSA_Halo = true, VSA_Hearts = true,
+            VSA_Runes = true, VSA_Galaxy = true, VSA_Afterimages = true,
+            VSA_SkyboxCube = true
+        }
+        for _, obj in ipairs(workspace:GetChildren()) do
+            if oldNames[obj.Name] then obj:Destroy() end
+        end
+        local character = Player.Character
+        if character then
+            for _, obj in ipairs(character:GetDescendants()) do
+                if obj.Name == "VSA_CharacterOutline" or obj.Name == "VSA_Trail" or obj.Name == "VSA_Accessories" then
+                    obj:Destroy()
+                end
+            end
+        end
+        for _, obj in ipairs(Lighting:GetChildren()) do
+            if obj.Name == "VSA_Bloom" or obj.Name == "VSA_ColorCorrection" then
+                obj:Destroy()
+            end
+        end
+    end)
+
+    local originalFog = {
+        Color = Lighting.FogColor,
+        Start = Lighting.FogStart,
+        End = Lighting.FogEnd
+    }
+
+    local originalCamera = {
+        Mode = Player.CameraMode,
+        Min = Player.CameraMinZoomDistance,
+        Max = Player.CameraMaxZoomDistance,
+        FOV = Camera and Camera.FieldOfView or 70
+    }
+
+    local Window
+
+    local function notify(title, message)
+        pcall(function()
+            if Window then
+                Window:Notify({ Title = title, Content = message, Kind = "info", Duration = 3 })
+            end
+        end)
+    end
+
+    local function colorArray(color)
+        return { color.R, color.G, color.B }
+    end
+
+    local function arrayColor(value, fallback)
+        if type(value) == "table" and #value >= 3 then
+            return Color3.new(
+                math.clamp(tonumber(value[1]) or fallback.R, 0, 1),
+                math.clamp(tonumber(value[2]) or fallback.G, 0, 1),
+                math.clamp(tonumber(value[3]) or fallback.B, 0, 1)
+            )
+        end
+        return fallback
+    end
+
+    local function getRoot()
+        local character = Player.Character
+        return character and character:FindFirstChild("HumanoidRootPart")
+    end
+
+    local function getHead()
+        local character = Player.Character
+        return character and character:FindFirstChild("Head")
+    end
+
+    --==========================================================
+    -- WINDOW
+    --==========================================================
+
+    Window = UI:CreateWindow({
+        Title = "VSA",
+        Subtitle = "Visual Script Avacado · Sakura",
+        Theme = "Pink",
+        Mode = "Window",
+        Size = Vector2.new(620, 440),
+        Keybind = Enum.KeyCode.RightControl,
+        ConfigFolder = "VSA",
+        Icon = "🌸",
+        ShowUser = true
+    })
+
+    local AboutTab = Window:AddTab({ Name = "About", Icon = "🌸" })
+    local CharacterTab = Window:AddTab({ Name = "Character", Icon = "🎀" })
+    local MovementTab = Window:AddTab({ Name = "Movement", Icon = "⚡" })
+    local WorldTab = Window:AddTab({ Name = "World", Icon = "🌌" })
+    local InterfaceTab = Window:AddTab({ Name = "Interface", Icon = "🎨" })
+    local ObjectsTab = Window:AddTab({ Name = "Objects", Icon = "🧩" })
+
+    -- Aliases matching original grouping
+    local VisualFX = CharacterTab
+    local Presets = InterfaceTab
+    local Utilities = InterfaceTab
+    local CameraTab = MovementTab
+
+    do
+        local sec = AboutTab:AddSection("VSA - Visual Script Avacado")
+        sec:AddParagraph({ Title = "Version", Content = "Anime / Sakura Edition" })
+        sec:AddParagraph({ Title = "Owner", Content = "Avakado_Kivi3" })
+        sec:AddParagraph({
+            Title = "About",
+            Content = "Cosmetic client-side effects, appearance presets, interface themes and camera settings."
+        })
+        sec:AddParagraph({
+            Title = "Compatibility",
+            Content = "Some effects are local-only. This script does not guarantee that cosmetic objects replicate to other players."
+        })
+    end
+
+    do
+        local sec = AboutTab:AddSection("Credits")
+        sec:AddParagraph({ Title = "Developer", Content = "Avakado_Kivi3" })
+        sec:AddParagraph({ Title = "Credits", Content = "hibdf13" })
+    end
+
+    --==========================================================
+    -- LIGHTING / FOG / BLOOM
+    --==========================================================
+
+    local bloomEffect = Instance.new("BloomEffect")
+    bloomEffect.Name = "VSA_Bloom"
+    bloomEffect.Enabled = false
+    bloomEffect.Parent = Lighting
+
+    local colorCorrection = Instance.new("ColorCorrectionEffect")
+    colorCorrection.Name = "VSA_ColorCorrection"
+    colorCorrection.Enabled = false
+    colorCorrection.Parent = Lighting
+
+    local function applyFog()
+        if state.fog then
+            Lighting.FogColor = state.fogColor
+            Lighting.FogStart = math.min(state.fogStart, state.fogEnd)
+            Lighting.FogEnd = math.max(state.fogEnd, state.fogStart + 1)
+        else
+            Lighting.FogColor = originalFog.Color
+            Lighting.FogStart = originalFog.Start
+            Lighting.FogEnd = originalFog.End
+        end
+    end
+
+    local function updateLightingEffects()
+        bloomEffect.Enabled = state.bloom and state.allFX
+        bloomEffect.Intensity = state.bloomIntensity
+        bloomEffect.Size = state.bloomSize
+
+        colorCorrection.Enabled = state.colorCorrection and state.allFX
+        colorCorrection.Brightness = state.brightness
+        colorCorrection.Contrast = state.contrast
+        colorCorrection.Saturation = state.saturation
+    end
+
+    --==========================================================
+    -- GRASS / WASTEGRASS COLORS
+    --==========================================================
+
+    local grassColor = Color3.fromRGB(95, 180, 75)
+    local wasteGrassColor = Color3.fromRGB(125, 145, 85)
+    local rockColor = Color3.fromRGB(120, 120, 120)
+    local rockColorActive = false
+    local grassParts = {}
+    local wasteGrassParts = {}
+    local rockParts = {}
+    local grassScanComplete = false
+
+    local function isRockPart(object)
+        if not object or not object:IsA("BasePart") then
+            return false
+        end
+        local current = object
+        while current and current ~= workspace do
+            if string.lower(current.Name) == "rock" then
+                return true
+            end
+            current = current.Parent
+        end
+        return false
+    end
+
+    local function registerRockPart(object)
+        if isRockPart(object) and not rockParts[object] then
+            rockParts[object] = true
+            if rockColorActive then
+                pcall(function() object.Color = rockColor end)
+            end
+        end
+    end
+
+    task.spawn(function()
+        local descendants = workspace:GetDescendants()
+        for index, object in ipairs(descendants) do
+            if object:IsA("BasePart") then
+                local lowerName = string.lower(object.Name)
+                local compactName = string.gsub(lowerName, "[%s_%-]", "")
+                if string.find(compactName, "wastegrass", 1, true) then
+                    table.insert(wasteGrassParts, object)
+                elseif compactName == "grass" or string.find(compactName, "grass", 1, true) then
+                    table.insert(grassParts, object)
+                end
+                registerRockPart(object)
+            end
+            if index % 500 == 0 then
+                task.wait()
+            end
+        end
+        grassScanComplete = true
+    end)
+
+    workspace.DescendantAdded:Connect(function(object)
+        if object:IsA("BasePart") then
+            registerRockPart(object)
+        end
+    end)
+
+    local function applyGrassColor(color)
+        grassColor = color
+        pcall(function()
+            workspace.Terrain:SetMaterialColor(Enum.Material.Grass, color)
+        end)
+        for _, object in ipairs(grassParts) do
+            if object and object.Parent then
+                pcall(function() object.Color = color end)
+            end
+        end
+    end
+
+    local function applyWasteGrassColor(color)
+        wasteGrassColor = color
+        for _, object in ipairs(wasteGrassParts) do
+            if object and object.Parent then
+                pcall(function() object.Color = color end)
+            end
+        end
+    end
+
+    local function applyRockColor(color)
+        rockColor = color
+        rockColorActive = true
+        for object in pairs(rockParts) do
+            if object and object.Parent then
+                pcall(function() object.Color = color end)
+            else
+                rockParts[object] = nil
+            end
+        end
+    end
+
+    do
+        local sec = WorldTab:AddSection("Grass Colors")
+        sec:AddColorPicker({
+            Name = "Grass Color",
+            Default = grassColor,
+            Callback = function(color)
+                applyGrassColor(color)
+            end
+        })
+        sec:AddColorPicker({
+            Name = "WasteGrass Color",
+            Default = wasteGrassColor,
+            Callback = function(color)
+                applyWasteGrassColor(color)
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Rock Color",
+            Default = rockColor,
+            Callback = function(color)
+                applyRockColor(color)
+            end
+        })
+    end
+
+    do
+        local sec = WorldTab:AddSection("Atmosphere")
+        sec:AddToggle({
+            Name = "Fog",
+            Default = false,
+            Callback = function(v)
+                state.fog = v
+                applyFog()
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Fog Color",
+            Default = state.fogColor,
+            Callback = function(v)
+                state.fogColor = v
+                applyFog()
+            end
+        })
+        sec:AddSlider({
+            Name = "Fog Start",
+            Min = 0,
+            Max = 1000,
+            Default = 0,
+            Increment = 10,
+            Callback = function(v)
+                state.fogStart = v
+                applyFog()
+            end
+        })
+        sec:AddSlider({
+            Name = "Fog End",
+            Min = 50,
+            Max = 5000,
+            Default = 300,
+            Increment = 50,
+            Callback = function(v)
+                state.fogEnd = v
+                applyFog()
+            end
+        })
+    end
+
+    do
+        local sec = WorldTab:AddSection("Bloom and Color Correction")
+        sec:AddToggle({
+            Name = "Bloom",
+            Default = false,
+            Callback = function(v)
+                state.bloom = v
+                updateLightingEffects()
+            end
+        })
+        sec:AddSlider({
+            Name = "Bloom Intensity",
+            Min = 0,
+            Max = 300,
+            Default = 50,
+            Increment = 5,
+            Callback = function(v)
+                state.bloomIntensity = v / 100
+                updateLightingEffects()
+            end
+        })
+        sec:AddSlider({
+            Name = "Bloom Size",
+            Min = 0,
+            Max = 56,
+            Default = 24,
+            Increment = 1,
+            Callback = function(v)
+                state.bloomSize = v
+                updateLightingEffects()
+            end
+        })
+        sec:AddToggle({
+            Name = "Color Correction",
+            Default = false,
+            Callback = function(v)
+                state.colorCorrection = v
+                updateLightingEffects()
+            end
+        })
+        sec:AddSlider({
+            Name = "Brightness",
+            Min = -100,
+            Max = 100,
+            Default = 3,
+            Increment = 1,
+            Callback = function(v)
+                state.brightness = v / 100
+                updateLightingEffects()
+            end
+        })
+        sec:AddSlider({
+            Name = "Contrast",
+            Min = -100,
+            Max = 100,
+            Default = 8,
+            Increment = 1,
+            Callback = function(v)
+                state.contrast = v / 100
+                updateLightingEffects()
+            end
+        })
+        sec:AddSlider({
+            Name = "Saturation",
+            Min = -100,
+            Max = 100,
+            Default = 15,
+            Increment = 1,
+            Callback = function(v)
+                state.saturation = v / 100
+                updateLightingEffects()
+            end
+        })
+    end
+
+    --==========================================================
+    -- ACCESSORIES
+    --==========================================================
+
+    local accessoryModel
+    local accessoryParts = {}
+    local accessoryColors = {}
+    local accessoryTime = 0
+
+    local function clearAccessories()
+        if accessoryModel then
+            accessoryModel:Destroy()
+            accessoryModel = nil
+        end
+        table.clear(accessoryParts)
+        table.clear(accessoryColors)
+    end
+
+    local function createAccessories()
+        clearAccessories()
+
+        local character = Player.Character
+        local head = character and character:FindFirstChild("Head")
+        if not head then
+            return false
+        end
+
+        accessoryModel = Instance.new("Model")
+        accessoryModel.Name = "VSA_Accessories"
+        accessoryModel.Parent = character
+
+        local function addPart(name, size, offset, color, shape, rotation)
+            local part = Instance.new("Part")
+            part.Name = name
+            part.Size = size * state.effectScale
+            part.Shape = shape or Enum.PartType.Block
+            part.Material = Enum.Material.Neon
+            part.Color = color
+            part.CanCollide = false
+            part.CanTouch = false
+            part.CanQuery = false
+            part.Massless = true
+            part.CastShadow = false
+            part.Anchored = false
+            part.CFrame = head.CFrame
+                * CFrame.new(offset * state.effectScale)
+                * (rotation or CFrame.new())
+            part.Parent = accessoryModel
+
+            local weld = Instance.new("WeldConstraint")
+            weld.Part0 = head
+            weld.Part1 = part
+            weld.Parent = part
+
+            table.insert(accessoryParts, part)
+            accessoryColors[part] = color
+            return part
+        end
+
+        if state.accessoryStyle == "Sakura Pins" then
+            for side = -1, 1, 2 do
+                local x = side * 0.85
+                addPart("Kanzashi", Vector3.new(0.1, 0.12, 0.8),
+                    Vector3.new(x, 0.48, 0), C.Gold)
+
+                for i = 1, 5 do
+                    local angle = math.rad((i - 1) * 72)
+                    addPart("Sakura Petal", Vector3.new(0.14, 0.24, 0.17),
+                        Vector3.new(
+                            x + math.cos(angle) * 0.18,
+                            0.58 + math.sin(angle) * 0.18,
+                            -0.08
+                        ),
+                        i % 2 == 0 and C.LightPink or C.Pink,
+                        Enum.PartType.Ball)
+                end
+
+                addPart("Flower Center", Vector3.new(0.15, 0.15, 0.15),
+                    Vector3.new(x, 0.58, -0.15), C.Gold, Enum.PartType.Ball)
+
+                addPart("Leaf", Vector3.new(0.12, 0.25, 0.12),
+                    Vector3.new(x - side * 0.22, 0.4, -0.06),
+                    C.Green, Enum.PartType.Ball)
+            end
+
+        elseif state.accessoryStyle == "Fox Ears" or state.accessoryStyle == "Cat Ears" then
+            local fox = state.accessoryStyle == "Fox Ears"
+            for side = -1, 1, 2 do
+                addPart("Ear", Vector3.new(0.3, fox and 0.8 or 0.55, 0.24),
+                    Vector3.new(side * 0.48, fox and 0.75 or 0.62, 0),
+                    state.accessoryColor,
+                    Enum.PartType.Block,
+                    CFrame.Angles(0, 0, math.rad(side * 15)))
+
+                addPart("Inner Ear", Vector3.new(0.15, 0.3, 0.07),
+                    Vector3.new(side * 0.48, 0.65, -0.13),
+                    C.White)
+            end
+
+        elseif state.accessoryStyle == "Purple Bows" then
+            for side = -1, 1, 2 do
+                addPart("Bow", Vector3.new(0.4, 0.25, 0.12),
+                    Vector3.new(side * 0.55, 0.58, -0.08),
+                    C.Lavender, Enum.PartType.Ball)
+
+                addPart("Bow Center", Vector3.new(0.13, 0.13, 0.13),
+                    Vector3.new(side * 0.55, 0.58, -0.15),
+                    C.Gold, Enum.PartType.Ball)
+            end
+
+        else
+            for i = 1, 16 do
+                local angle = math.rad(i * 22.5)
+                addPart("Halo Light", Vector3.new(0.12, 0.12, 0.12),
+                    Vector3.new(math.cos(angle), 1.25, math.sin(angle)),
+                    C.Gold, Enum.PartType.Ball)
+            end
+        end
+
+        return true
+    end
+
+    local function updateAccessories()
+        for index, part in ipairs(accessoryParts) do
+            if part and part.Parent then
+                if state.accessoryRainbow and state.allFX then
+                    part.Color = Color3.fromHSV(
+                        (accessoryTime * 0.2 + index * 0.04) % 1,
+                        0.8, 1
+                    )
+                elseif state.accessoryColor ~= C.Sakura then
+                    part.Color = state.accessoryColor
+                else
+                    part.Color = accessoryColors[part] or C.Sakura
+                end
+            end
+        end
+    end
+
+    do
+        local sec = CharacterTab:AddSection("Anime Accessories")
+        sec:AddDropdown({
+            Name = "Accessory Style",
+            Default = "Sakura Pins",
+            Options = {
+                "Sakura Pins",
+                "Fox Ears",
+                "Cat Ears",
+                "Purple Bows",
+                "Angel Halo"
+            },
+            Callback = function(v)
+                state.accessoryStyle = v
+                if state.accessories then
+                    createAccessories()
+                end
+            end
+        })
+        sec:AddToggle({
+            Name = "Enable Accessories",
+            Default = false,
+            Callback = function(v)
+                state.accessories = v
+                if v then
+                    if not createAccessories() then
+                        notify("VSA", "Character head not found.")
+                    end
+                else
+                    clearAccessories()
+                end
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Accessory Color",
+            Default = state.accessoryColor,
+            Callback = function(v)
+                state.accessoryColor = v
+                updateAccessories()
+            end
+        })
+        sec:AddToggle({
+            Name = "Rainbow Accessories",
+            Default = false,
+            Callback = function(v)
+                state.accessoryRainbow = v
+            end
+        })
+        sec:AddToggle({
+            Name = "Accessory Sway Animation",
+            Default = true,
+            Callback = function(v)
+                state.accessorySway = v
+            end
+        })
+    end
+
+    --==========================================================
+    -- AURA
+    --==========================================================
+
+    local auraPart
+    local auraLight
+    local auraTime = 0
+
+    local function clearAura()
+        if auraPart then
+            auraPart:Destroy()
+            auraPart = nil
+            auraLight = nil
+        end
+    end
+
+    local function createAura()
+        clearAura()
+        local root = getRoot()
+        if not root then
+            return false
+        end
+
+        local part = Instance.new("Part")
+        part.Name = "VSA_Aura"
+        part.Shape = Enum.PartType.Ball
+        part.Size = Vector3.one * state.auraSize * state.effectScale
+        part.Material = Enum.Material.ForceField
+        part.Color = state.auraColor
+        part.Transparency = state.auraTransparency
+        part.CanCollide = false
+        part.CanTouch = false
+        part.CanQuery = false
+        part.Massless = true
+        part.CastShadow = false
+        part.CFrame = root.CFrame
+        part.Parent = Player.Character
+
+        local weld = Instance.new("WeldConstraint")
+        weld.Part0 = root
+        weld.Part1 = part
+        weld.Parent = part
+
+        auraPart = part
+
+        auraLight = Instance.new("PointLight")
+        auraLight.Color = state.auraColor
+        auraLight.Brightness = 1
+        auraLight.Range = state.auraSize * 2
+        auraLight.Parent = part
+
+        return true
+    end
+
+    local function updateAura()
+        if not auraPart or not auraPart.Parent then
+            return
+        end
+
+        local color = state.auraColor
+        if state.auraRainbow and state.allFX then
+            color = Color3.fromHSV((auraTime * 0.2) % 1, 0.8, 1)
+        end
+
+        auraPart.Color = color
+        auraPart.Transparency = state.allFX and state.auraTransparency or 1
+        auraPart.Size = Vector3.one * state.auraSize * state.effectScale
+
+        if auraLight then
+            auraLight.Color = color
+            auraLight.Range = state.auraSize * 2
+        end
+    end
+
+    do
+        local sec = VisualFX:AddSection("Sakura Aura")
+        sec:AddToggle({
+            Name = "Enable Aura",
+            Default = false,
+            Callback = function(v)
+                state.aura = v
+                if v then createAura() else clearAura() end
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Aura Color",
+            Default = state.auraColor,
+            Callback = function(v)
+                state.auraColor = v
+                updateAura()
+            end
+        })
+        sec:AddToggle({
+            Name = "Rainbow Aura",
+            Default = false,
+            Callback = function(v)
+                state.auraRainbow = v
+            end
+        })
+        sec:AddSlider({
+            Name = "Aura Size",
+            Min = 2,
+            Max = 12,
+            Default = 5,
+            Increment = 1,
+            Callback = function(v)
+                state.auraSize = v
+                updateAura()
+            end
+        })
+        sec:AddSlider({
+            Name = "Aura Transparency",
+            Min = 0,
+            Max = 95,
+            Default = 55,
+            Increment = 5,
+            Callback = function(v)
+                state.auraTransparency = v / 100
+                updateAura()
+            end
+        })
+    end
+
+    --==========================================================
+    -- SAKURA PETALS
+    --==========================================================
+
+    local sakuraFolder
+    local petals = {}
+    local sakuraTime = 0
+
+    local function clearPetals()
+        if sakuraFolder then
+            sakuraFolder:Destroy()
+            sakuraFolder = nil
+        end
+        table.clear(petals)
+    end
+
+    local function createPetals()
+        clearPetals()
+        sakuraFolder = Instance.new("Folder")
+        sakuraFolder.Name = "VSA_Sakura"
+        sakuraFolder.Parent = workspace
+
+        for _ = 1, state.sakuraCount do
+            local part = Instance.new("Part")
+            part.Name = "SakuraPetal"
+            part.Shape = Enum.PartType.Ball
+            part.Size = Vector3.new(0.14, 0.05, 0.18) * state.effectScale
+            part.Material = Enum.Material.Neon
+            part.Color = state.sakuraColor
+            part.Anchored = true
+            part.CanCollide = false
+            part.CanTouch = false
+            part.CanQuery = false
+            part.CastShadow = false
+            part.Parent = sakuraFolder
+
+            table.insert(petals, {
+                part = part,
+                angle = Random:NextNumber(0, math.pi * 2),
+                radius = Random:NextNumber(2, 5),
+                height = Random:NextNumber(-1, 4),
+                drift = Random:NextNumber(0.5, 1.5)
+            })
+        end
+    end
+
+    local function updatePetals(dt)
+        if not state.sakura or not state.allFX then
+            return
+        end
+
+        local root = getRoot()
+        if not root then
+            return
+        end
+
+        sakuraTime = sakuraTime + dt
+
+        for _, item in ipairs(petals) do
+            if item.part and item.part.Parent then
+                item.angle = item.angle + dt * item.drift * state.sakuraSpeed
+                item.height = item.height - dt * item.drift * state.sakuraSpeed
+
+                if item.height < -3 then
+                    item.height = Random:NextNumber(1, 5)
+                end
+
+                item.part.CFrame = CFrame.new(
+                    root.Position + Vector3.new(
+                        math.cos(item.angle) * item.radius,
+                        item.height,
+                        math.sin(item.angle) * item.radius
+                    )
+                ) * CFrame.Angles(sakuraTime, sakuraTime * 0.6, sakuraTime)
+
+                item.part.Color = state.sakuraColor
+                item.part.Transparency = 0
+            end
+        end
+    end
+
+    do
+        local sec = VisualFX:AddSection("Sakura Petals")
+        sec:AddToggle({
+            Name = "Pink Petal Trail",
+            Default = false,
+            Callback = function(v)
+                state.sakura = v
+                if v then createPetals() else clearPetals() end
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Petal Color",
+            Default = state.sakuraColor,
+            Callback = function(v)
+                state.sakuraColor = v
+            end
+        })
+        sec:AddSlider({
+            Name = "Petal Count",
+            Min = 4,
+            Max = 35,
+            Default = 14,
+            Increment = 1,
+            Callback = function(v)
+                state.sakuraCount = v
+                if state.sakura then
+                    createPetals()
+                end
+            end
+        })
+        sec:AddSlider({
+            Name = "Petal Speed",
+            Min = 10,
+            Max = 200,
+            Default = 100,
+            Increment = 10,
+            Callback = function(v)
+                state.sakuraSpeed = v / 100
+            end
+        })
+    end
+
+    --==========================================================
+    -- WINGS
+    --==========================================================
+
+    local wingsModel
+    local wings = {}
+    local wingTime = 0
+
+    local function clearWings()
+        if wingsModel then
+            wingsModel:Destroy()
+            wingsModel = nil
+        end
+        table.clear(wings)
+    end
+
+    local function createWings()
+        clearWings()
+        local character = Player.Character
+        local torso = character and (
+            character:FindFirstChild("UpperTorso")
+            or character:FindFirstChild("Torso")
+            or character:FindFirstChild("HumanoidRootPart")
+        )
+        if not torso then
+            return false
+        end
+
+        wingsModel = Instance.new("Model")
+        wingsModel.Name = "VSA_Wings"
+        wingsModel.Parent = character
+
+        for side = -1, 1, 2 do
+            for i = 1, 4 do
+                local part = Instance.new("Part")
+                part.Name = "WingFeather"
+                part.Size = Vector3.new(0.18, 0.85, 0.28) * state.effectScale
+                part.Material = Enum.Material.Neon
+                part.Color = state.wingsColor
+                part.CanCollide = false
+                part.CanTouch = false
+                part.CanQuery = false
+                part.Massless = true
+                part.CastShadow = false
+                part.Anchored = false
+
+                local base = torso.CFrame
+                    * CFrame.new(
+                        side * (0.65 + i * 0.23) * state.effectScale,
+                        (0.45 - i * 0.12) * state.effectScale,
+                        0.45 * state.effectScale
+                    )
+                    * CFrame.Angles(0, 0, math.rad(side * (15 + i * 10)))
+
+                part.CFrame = base
+                part.Parent = wingsModel
+
+                local weld = Instance.new("Weld")
+                weld.Part0 = torso
+                weld.Part1 = part
+                weld.C0 = torso.CFrame:ToObjectSpace(base)
+                weld.C1 = CFrame.new()
+                weld.Parent = part
+
+                table.insert(wings, {
+                    part = part,
+                    weld = weld,
+                    base = weld.C0,
+                    side = side,
+                    index = i
+                })
+            end
+        end
+
+        return true
+    end
+
+    local function updateWings()
+        for _, item in ipairs(wings) do
+            if item.part and item.part.Parent and item.weld and item.weld.Parent then
+                local flap = math.sin(wingTime * 5 + item.index * 0.3) * 0.22
+                item.weld.C0 = item.base * CFrame.Angles(0, 0, flap * item.side)
+
+                item.part.Transparency = state.allFX and 0 or 1
+
+                if state.wingsRainbow then
+                    item.part.Color = Color3.fromHSV(
+                        (wingTime * 0.15 + item.index * 0.08) % 1, 0.8, 1
+                    )
+                else
+                    item.part.Color = state.wingsColor
+                end
+            end
+        end
+    end
+
+    do
+        local sec = VisualFX:AddSection("Animated Wings")
+        sec:AddToggle({
+            Name = "Enable Wings",
+            Default = false,
+            Callback = function(v)
+                state.wings = v
+                if v then createWings() else clearWings() end
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Wing Color",
+            Default = state.wingsColor,
+            Callback = function(v)
+                state.wingsColor = v
+            end
+        })
+        sec:AddToggle({
+            Name = "Rainbow Wings",
+            Default = false,
+            Callback = function(v)
+                state.wingsRainbow = v
+            end
+        })
+    end
+
+    --==========================================================
+    -- HALO
+    --==========================================================
+
+    local haloFolder
+    local haloParts = {}
+    local haloTime = 0
+
+    local function clearHalo()
+        if haloFolder then
+            haloFolder:Destroy()
+            haloFolder = nil
+        end
+        table.clear(haloParts)
+    end
+
+    local function createHalo()
+        clearHalo()
+        haloFolder = Instance.new("Folder")
+        haloFolder.Name = "VSA_Halo"
+        haloFolder.Parent = workspace
+
+        for i = 1, 16 do
+            local part = Instance.new("Part")
+            part.Name = "HaloLight"
+            part.Shape = Enum.PartType.Ball
+            part.Size = Vector3.one * 0.12 * state.effectScale
+            part.Material = Enum.Material.Neon
+            part.Color = state.haloColor
+            part.Anchored = true
+            part.CanCollide = false
+            part.CanTouch = false
+            part.CanQuery = false
+            part.CastShadow = false
+            part.Parent = haloFolder
+
+            table.insert(haloParts, {
+                part = part,
+                angle = math.rad((i - 1) * 22.5)
+            })
+        end
+    end
+
+    local function updateHalo()
+        if not state.halo or not state.allFX then
+            return
+        end
+
+        local head = getHead()
+        if not head then
+            return
+        end
+
+        for i, item in ipairs(haloParts) do
+            if item.part and item.part.Parent then
+                local angle = item.angle + haloTime
+                item.part.Position = head.Position + Vector3.new(
+                    math.cos(angle) * 0.95 * state.effectScale,
+                    1.15 * state.effectScale,
+                    math.sin(angle) * 0.95 * state.effectScale
+                )
+
+                item.part.Color = state.haloRainbow
+                    and Color3.fromHSV((haloTime * 0.4 + i / #haloParts) % 1, 0.8, 1)
+                    or state.haloColor
+
+                item.part.Transparency = 0
+            end
+        end
+    end
+
+    do
+        local sec = VisualFX:AddSection("Glowing RGB Halo")
+        sec:AddToggle({
+            Name = "Enable Halo",
+            Default = false,
+            Callback = function(v)
+                state.halo = v
+                if v then createHalo() else clearHalo() end
+            end
+        })
+        sec:AddToggle({
+            Name = "Rainbow Halo",
+            Default = true,
+            Callback = function(v)
+                state.haloRainbow = v
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Halo Color",
+            Default = state.haloColor,
+            Callback = function(v)
+                state.haloColor = v
+            end
+        })
+    end
+
+    --==========================================================
+    -- HEARTS / RUNES / GALAXY
+    --==========================================================
+
+    local orbiters = {}
+    local orbitFolder
+    local orbitTime = 0
+
+    local function clearOrbiters()
+        if orbitFolder then
+            orbitFolder:Destroy()
+            orbitFolder = nil
+        end
+        table.clear(orbiters)
+    end
+
+    local function createOrbiters(kind, count, color)
+        clearOrbiters()
+        orbitFolder = Instance.new("Folder")
+        orbitFolder.Name = "VSA_" .. kind
+        orbitFolder.Parent = workspace
+
+        for i = 1, count do
+            local part = Instance.new("Part")
+            part.Name = kind .. "Particle"
+            part.Shape = Enum.PartType.Ball
+            part.Size = Vector3.one * 0.18 * state.effectScale
+            part.Material = Enum.Material.Neon
+            part.Color = color
+            part.Anchored = true
+            part.CanCollide = false
+            part.CanTouch = false
+            part.CanQuery = false
+            part.CastShadow = false
+            part.Parent = orbitFolder
+
+            table.insert(orbiters, {
+                part = part,
+                angle = math.rad((i - 1) * (360 / count)),
+                radius = kind == "Galaxy" and Random:NextNumber(2, 5) or 2,
+                height = Random:NextNumber(-1, 2)
+            })
+        end
+    end
+
+    local function updateOrbiters(kind, enabled, color)
+        if not enabled or not state.allFX then
+            return
+        end
+
+        local root = getRoot()
+        if not root then
+            return
+        end
+
+        for i, item in ipairs(orbiters) do
+            if item.part and item.part.Parent then
+                local angle = item.angle + orbitTime * (kind == "Runes" and 0.25 or 1)
+
+                if kind == "Runes" then
+                    item.part.Size = Vector3.new(0.08, 0.08, 0.85) * state.effectScale
+                    item.part.CFrame = CFrame.new(
+                        root.Position.X + math.cos(angle) * 2.1 * state.effectScale,
+                        root.Position.Y - 2.6,
+                        root.Position.Z + math.sin(angle) * 2.1 * state.effectScale
+                    ) * CFrame.Angles(0, -angle, 0)
+                else
+                    item.part.Position = root.Position + Vector3.new(
+                        math.cos(angle) * item.radius,
+                        item.height + math.sin(orbitTime * 2 + i) * 0.2,
+                        math.sin(angle) * item.radius
+                    )
+                end
+
+                if kind == "Galaxy" then
+                    item.part.Color = Color3.fromHSV(
+                        (orbitTime * 0.1 + i / #orbiters) % 1, 0.8, 1
+                    )
+                else
+                    item.part.Color = color
+                end
+            end
+        end
+    end
+
+    do
+        local sec = VisualFX:AddSection("Extra Effects")
+        sec:AddToggle({
+            Name = "Hearts Around Character",
+            Default = false,
+            Callback = function(v)
+                state.hearts = v
+                if v then
+                    createOrbiters("Hearts", 8, state.heartsColor)
+                elseif not state.runes and not state.galaxy then
+                    clearOrbiters()
+                end
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Heart Color",
+            Default = state.heartsColor,
+            Callback = function(v)
+                state.heartsColor = v
+            end
+        })
+        sec:AddToggle({
+            Name = "Magic Runes Under Feet",
+            Default = false,
+            Callback = function(v)
+                state.runes = v
+                if v then
+                    createOrbiters("Runes", 8, state.runesColor)
+                elseif not state.hearts and not state.galaxy then
+                    clearOrbiters()
+                end
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Rune Color",
+            Default = state.runesColor,
+            Callback = function(v)
+                state.runesColor = v
+            end
+        })
+        sec:AddToggle({
+            Name = "Galaxy Star Aura",
+            Default = false,
+            Callback = function(v)
+                state.galaxy = v
+                if v then
+                    createOrbiters("Galaxy", 24, state.galaxyColor)
+                elseif not state.hearts and not state.runes then
+                    clearOrbiters()
+                end
+            end
+        })
+    end
+
+    --==========================================================
+    -- CHARACTER OUTLINE
+    --==========================================================
+
+    local characterHighlight
+    local outlineTime = 0
+
+    local function clearOutline()
+        if characterHighlight then
+            characterHighlight:Destroy()
+            characterHighlight = nil
+        end
+    end
+
+    local function createOutline()
+        clearOutline()
+        local character = Player.Character
+        if not character then
+            return
+        end
+
+        characterHighlight = Instance.new("Highlight")
+        characterHighlight.Name = "VSA_CharacterOutline"
+        characterHighlight.Adornee = character
+        characterHighlight.FillColor = state.outlineColor
+        characterHighlight.OutlineColor = state.outlineColor
+        characterHighlight.FillTransparency = 0.85
+        characterHighlight.OutlineTransparency = 0
+        characterHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        characterHighlight.Parent = character
+    end
+
+    do
+        local sec = CharacterTab:AddSection("Character RGB Outline")
+        sec:AddToggle({
+            Name = "Enable Outline",
+            Default = false,
+            Callback = function(v)
+                state.outline = v
+                if v then createOutline() else clearOutline() end
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Outline Color",
+            Default = state.outlineColor,
+            Callback = function(v)
+                state.outlineColor = v
+            end
+        })
+        sec:AddToggle({
+            Name = "Rainbow Outline",
+            Default = false,
+            Callback = function(v)
+                state.outlineRainbow = v
+            end
+        })
+    end
+
+    --==========================================================
+    -- CHARACTER TRAIL
+    --==========================================================
+
+    local characterTrail
+    local attachment0
+    local attachment1
+    local trailTime = 0
+
+    local function clearTrail()
+        if characterTrail then characterTrail:Destroy() characterTrail = nil end
+        if attachment0 then attachment0:Destroy() attachment0 = nil end
+        if attachment1 then attachment1:Destroy() attachment1 = nil end
+    end
+
+    local function createTrail()
+        clearTrail()
+        local root = getRoot()
+        if not root then
+            return
+        end
+
+        attachment0 = Instance.new("Attachment")
+        attachment0.Position = Vector3.new(-0.8, -1, 0)
+        attachment0.Parent = root
+
+        attachment1 = Instance.new("Attachment")
+        attachment1.Position = Vector3.new(0.8, -1, 0)
+        attachment1.Parent = root
+
+        characterTrail = Instance.new("Trail")
+        characterTrail.Name = "VSA_Trail"
+        characterTrail.Attachment0 = attachment0
+        characterTrail.Attachment1 = attachment1
+        characterTrail.Lifetime = state.trailLifetime
+        characterTrail.Color = ColorSequence.new(state.trailColor)
+        characterTrail.Transparency = NumberSequence.new(0.25)
+        characterTrail.FaceCamera = true
+        characterTrail.Parent = root
+    end
+
+    do
+        local sec = CharacterTab:AddSection("Character Trail")
+        sec:AddToggle({
+            Name = "Enable Trail",
+            Default = false,
+            Callback = function(v)
+                state.trail = v
+                if v then createTrail() else clearTrail() end
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Trail Color",
+            Default = state.trailColor,
+            Callback = function(v)
+                state.trailColor = v
+            end
+        })
+        sec:AddToggle({
+            Name = "Rainbow Trail",
+            Default = false,
+            Callback = function(v)
+                state.trailRainbow = v
+            end
+        })
+        sec:AddSlider({
+            Name = "Trail Lifetime",
+            Min = 1,
+            Max = 50,
+            Default = 15,
+            Increment = 1,
+            Callback = function(v)
+                state.trailLifetime = v / 10
+                if characterTrail then
+                    characterTrail.Lifetime = state.trailLifetime
+                end
+            end
+        })
+    end
+
+    --==========================================================
+    -- AFTERIMAGE
+    --==========================================================
+
+    local afterimageTimer = 0
+    local afterimageFolder
+
+    local function clearAfterimages()
+        if afterimageFolder then
+            afterimageFolder:Destroy()
+            afterimageFolder = nil
+        end
+    end
+
+    local function spawnAfterimage()
+        local character = Player.Character
+        if not character or not state.afterimage or not state.allFX then
+            return
+        end
+
+        if not afterimageFolder then
+            afterimageFolder = Instance.new("Folder")
+            afterimageFolder.Name = "VSA_Afterimages"
+            afterimageFolder.Parent = workspace
+        end
+
+        local clone = Instance.new("Model")
+        clone.Name = "VSA_Afterimage"
+        clone.Parent = afterimageFolder
+
+        for _, source in ipairs(character:GetChildren()) do
+            if source:IsA("BasePart") and source.Name ~= "HumanoidRootPart" then
+                local part = Instance.new("Part")
+                part.Name = source.Name
+                part.Size = source.Size
+                part.CFrame = source.CFrame
+                part.Color = state.afterimageColor
+                part.Material = Enum.Material.Neon
+                part.Transparency = 0.55
+                part.Anchored = true
+                part.CanCollide = false
+                part.CanTouch = false
+                part.CanQuery = false
+                part.CastShadow = false
+                part.Parent = clone
+            end
+        end
+
+        task.spawn(function()
+            for i = 1, 8 do
+                if not clone.Parent then
+                    break
+                end
+                for _, part in ipairs(clone:GetChildren()) do
+                    if part:IsA("BasePart") then
+                        part.Transparency = 0.55 + i * 0.055
+                    end
+                end
+                task.wait(0.04)
+            end
+            if clone.Parent then
+                clone:Destroy()
+            end
+        end)
+    end
+
+    do
+        local sec = CharacterTab:AddSection("Afterimage")
+        sec:AddToggle({
+            Name = "Enable Afterimage",
+            Default = false,
+            Callback = function(v)
+                state.afterimage = v
+                if not v then clearAfterimages() end
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Afterimage Color",
+            Default = state.afterimageColor,
+            Callback = function(v)
+                state.afterimageColor = v
+            end
+        })
+    end
+
+    --==========================================================
+    -- MOVEMENT / HUD
+    --==========================================================
+
+    local hudGui
+    local speedText
+    local jumpText
+    local topBar
+    local statsText
+    local floatingButton
+    local statusText
+    local currentTheme = {
+        background = Color3.fromRGB(28, 28, 28),
+        panel = Color3.fromRGB(44, 44, 44),
+        accent = Color3.fromRGB(240, 90, 170),
+        text = Color3.fromRGB(240, 240, 240)
+    }
+
+    local function buildHUD()
+        if hudGui then
+            hudGui:Destroy()
+        end
+
+        hudGui = Instance.new("ScreenGui")
+        hudGui.Name = "VSA_HUD"
+        hudGui.ResetOnSpawn = false
+        hudGui.Parent = PlayerGui
+
+        topBar = Instance.new("Frame")
+        topBar.Size = UDim2.fromOffset(440, 42)
+        topBar.Position = UDim2.new(0.5, -220, 0, 8)
+        topBar.BackgroundColor3 = currentTheme.background
+        topBar.BackgroundTransparency = 0.08
+        topBar.BorderSizePixel = 0
+        topBar.Parent = hudGui
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 12)
+        corner.Parent = topBar
+
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = currentTheme.accent
+        stroke.Thickness = 1.5
+        stroke.Parent = topBar
+
+        local title = Instance.new("TextLabel")
+        title.Size = UDim2.new(0.56, 0, 1, 0)
+        title.Position = UDim2.new(0, 10, 0, 0)
+        title.BackgroundTransparency = 1
+        title.Text = "🌸 VSA - Visual Script Avacado"
+        title.TextColor3 = currentTheme.text
+        title.Font = Enum.Font.GothamBold
+        title.TextSize = 12
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Parent = topBar
+
+        statsText = Instance.new("TextLabel")
+        statsText.Size = UDim2.new(0.43, -8, 1, 0)
+        statsText.Position = UDim2.new(0.57, 0, 0, 0)
+        statsText.BackgroundTransparency = 1
+        statsText.Text = "FPS -- | Ping --"
+        statsText.TextColor3 = currentTheme.accent
+        statsText.Font = Enum.Font.GothamMedium
+        statsText.TextSize = 12
+        statsText.Parent = topBar
+
+        statusText = Instance.new("TextLabel")
+        statusText.Size = UDim2.fromOffset(210, 28)
+        statusText.Position = UDim2.new(0, 12, 0, 58)
+        statusText.BackgroundColor3 = currentTheme.background
+        statusText.TextColor3 = currentTheme.text
+        statusText.Text = "VSA | FX ON"
+        statusText.Font = Enum.Font.GothamBold
+        statusText.TextSize = 12
+        statusText.Parent = hudGui
+
+        local statusCorner = Instance.new("UICorner")
+        statusCorner.CornerRadius = UDim.new(0, 8)
+        statusCorner.Parent = statusText
+
+        speedText = Instance.new("TextLabel")
+        speedText.Size = UDim2.fromOffset(170, 28)
+        speedText.Position = UDim2.new(0, 12, 0.5, 0)
+        speedText.BackgroundColor3 = currentTheme.background
+        speedText.TextColor3 = currentTheme.accent
+        speedText.Text = "SPEED 0"
+        speedText.Font = Enum.Font.GothamBold
+        speedText.TextSize = 13
+        speedText.Visible = state.speedHUD
+        speedText.Parent = hudGui
+
+        local speedCorner = Instance.new("UICorner")
+        speedCorner.CornerRadius = UDim.new(0, 8)
+        speedCorner.Parent = speedText
+
+        jumpText = Instance.new("TextLabel")
+        jumpText.Size = UDim2.fromOffset(150, 28)
+        jumpText.Position = UDim2.new(0.5, -75, 0.82, 0)
+        jumpText.BackgroundColor3 = currentTheme.background
+        jumpText.TextColor3 = currentTheme.accent
+        jumpText.Text = "GROUND"
+        jumpText.Font = Enum.Font.GothamBold
+        jumpText.TextSize = 13
+        jumpText.Visible = state.jumpIndicator
+        jumpText.Parent = hudGui
+
+        local jumpCorner = Instance.new("UICorner")
+        jumpCorner.CornerRadius = UDim.new(0, 8)
+        jumpCorner.Parent = jumpText
+
+        floatingButton = Instance.new("TextButton")
+        floatingButton.Size = UDim2.fromOffset(48, 48)
+        floatingButton.Position = UDim2.new(1, -65, 0.5, -24)
+        floatingButton.BackgroundColor3 = currentTheme.panel
+        floatingButton.TextColor3 = currentTheme.text
+        floatingButton.Text = "VSA"
+        floatingButton.Font = Enum.Font.GothamBold
+        floatingButton.TextSize = 14
+        floatingButton.Visible = state.floatingButton
+        floatingButton.Parent = hudGui
+
+        local floatCorner = Instance.new("UICorner")
+        floatCorner.CornerRadius = UDim.new(1, 0)
+        floatCorner.Parent = floatingButton
+
+        local floatStroke = Instance.new("UIStroke")
+        floatStroke.Color = currentTheme.accent
+        floatStroke.Thickness = 2
+        floatStroke.Parent = floatingButton
+
+        floatingButton.MouseButton1Click:Connect(function()
+            if Window then
+                Window:Toggle()
+            end
+        end)
+    end
+
+    local function updateHUDTheme()
+        if not hudGui then
+            return
+        end
+        for _, object in ipairs(hudGui:GetDescendants()) do
+            if object:IsA("UIStroke") then
+                object.Color = currentTheme.accent
+            elseif object:IsA("TextLabel") then
+                object.TextColor3 = currentTheme.text
+            elseif object:IsA("TextButton") then
+                object.BackgroundColor3 = currentTheme.panel
+                object.TextColor3 = currentTheme.text
+            elseif object:IsA("Frame") then
+                object.BackgroundColor3 = currentTheme.background
+            end
+        end
+    end
+
+    do
+        local sec = MovementTab:AddSection("Indicators")
+        sec:AddToggle({
+            Name = "Speed Indicator",
+            Default = false,
+            Callback = function(v)
+                state.speedHUD = v
+                if speedText then speedText.Visible = v end
+            end
+        })
+        sec:AddToggle({
+            Name = "Jump Indicator",
+            Default = false,
+            Callback = function(v)
+                state.jumpIndicator = v
+                if jumpText then jumpText.Visible = v end
+            end
+        })
+        sec:AddToggle({
+            Name = "Landing Ring",
+            Default = false,
+            Callback = function(v)
+                state.landingEffect = v
+            end
+        })
+        sec:AddSlider({
+            Name = "Global Effect Scale",
+            Min = 25,
+            Max = 200,
+            Default = 100,
+            Increment = 5,
+            Callback = function(v)
+                state.effectScale = v / 100
+                if state.aura then updateAura() end
+            end
+        })
+    end
+
+    --==========================================================
+    -- LANDING RING
+    --==========================================================
+
+    local function landingRing()
+        if not state.landingEffect or not state.allFX then
+            return
+        end
+
+        local root = getRoot()
+        if not root then
+            return
+        end
+
+        local ring = Instance.new("Part")
+        ring.Name = "VSA_LandingRing"
+        ring.Shape = Enum.PartType.Cylinder
+        ring.Size = Vector3.new(0.1, 1, 1) * state.effectScale
+        ring.Material = Enum.Material.Neon
+        ring.Color = C.Sakura
+        ring.Transparency = 0.2
+        ring.Anchored = true
+        ring.CanCollide = false
+        ring.CanTouch = false
+        ring.CanQuery = false
+        ring.CastShadow = false
+        ring.CFrame = CFrame.new(root.Position - Vector3.new(0, 2.6, 0))
+            * CFrame.Angles(0, 0, math.rad(90))
+        ring.Parent = workspace
+
+        local tween = TweenService:Create(
+            ring,
+            TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {
+                Size = Vector3.new(0.1, 8, 8) * state.effectScale,
+                Transparency = 1
+            }
+        )
+        tween:Play()
+        tween.Completed:Connect(function()
+            ring:Destroy()
+        end)
+    end
+
+    local lastHumanoidState
+
+    local function hookLanding(character)
+        local humanoid = character:WaitForChild("Humanoid", 5)
+        if not humanoid then
+            return
+        end
+
+        lastHumanoidState = humanoid:GetState()
+        humanoid.StateChanged:Connect(function(_, newState)
+            if newState == Enum.HumanoidStateType.Landed
+                or newState == Enum.HumanoidStateType.Running then
+                if lastHumanoidState == Enum.HumanoidStateType.Freefall
+                    or lastHumanoidState == Enum.HumanoidStateType.Jumping then
+                    landingRing()
+                end
+            end
+            lastHumanoidState = newState
+        end)
+    end
+
+    --==========================================================
+    -- CAMERA
+    --==========================================================
+
+    local function applyCamera()
+        Player.CameraMode = Enum.CameraMode.Classic
+        Player.CameraMinZoomDistance = math.clamp(state.minZoom, 0.5, state.maxZoom)
+        Player.CameraMaxZoomDistance = math.max(state.maxZoom, state.minZoom)
+        if workspace.CurrentCamera then
+            workspace.CurrentCamera.FieldOfView = state.fov
+        end
+    end
+
+    local function resetCamera()
+        state.thirdPerson = false
+        state.minZoom = originalCamera.Min
+        state.maxZoom = originalCamera.Max
+        state.fov = originalCamera.FOV
+
+        Player.CameraMode = originalCamera.Mode
+        Player.CameraMinZoomDistance = originalCamera.Min
+        Player.CameraMaxZoomDistance = originalCamera.Max
+
+        if workspace.CurrentCamera then
+            workspace.CurrentCamera.FieldOfView = originalCamera.FOV
+        end
+    end
+
+    do
+        local sec = CameraTab:AddSection("Camera Settings")
+        sec:AddToggle({
+            Name = "Third Person / Extended Zoom",
+            Default = false,
+            Callback = function(v)
+                state.thirdPerson = v
+                if v then
+                    applyCamera()
+                else
+                    Player.CameraMode = originalCamera.Mode
+                    Player.CameraMinZoomDistance = originalCamera.Min
+                    Player.CameraMaxZoomDistance = originalCamera.Max
+                end
+            end
+        })
+        sec:AddSlider({
+            Name = "Maximum Zoom",
+            Min = 10,
+            Max = 1000,
+            Default = 1000,
+            Increment = 10,
+            Callback = function(v)
+                state.maxZoom = v
+                if state.thirdPerson then applyCamera() end
+            end
+        })
+        sec:AddSlider({
+            Name = "Minimum Zoom",
+            Min = 0,
+            Max = 10,
+            Default = 0.5,
+            Increment = 0.5,
+            Callback = function(v)
+                state.minZoom = math.max(0.5, v)
+                if state.thirdPerson then applyCamera() end
+            end
+        })
+        sec:AddSlider({
+            Name = "Camera FOV",
+            Min = 50,
+            Max = 110,
+            Default = 70,
+            Increment = 1,
+            Callback = function(v)
+                state.fov = v
+                if workspace.CurrentCamera then
+                    workspace.CurrentCamera.FieldOfView = v
+                end
+            end
+        })
+        sec:AddButton({
+            Name = "Reset Camera",
+            Callback = function()
+                resetCamera()
+                notify("VSA", "Camera reset.")
+            end
+        })
+    end
+
+    --==========================================================
+    -- OBJECT COLORS
+    --==========================================================
+
+    local palletParts = {}
+    local originalPalletColors = {}
+    local lineObjects = {}
+    local originalLineColors = {}
+    local palletTime = 0
+    local lineTime = 0
+
+    local function isPalletPart(object)
+        if not object:IsA("BasePart") then
+            return false
+        end
+        local ancestor = object.Parent
+        while ancestor and ancestor ~= workspace do
+            local lowerName = string.lower(ancestor.Name)
+            if string.find(lowerName, "pallet", 1, true)
+                or string.find(lowerName, "palletlightbrown", 1, true) then
+                return true
+            end
+            ancestor = ancestor.Parent
+        end
+        return false
+    end
+
+    local function registerObject(object)
+        if isPalletPart(object) then
+            palletParts[object] = true
+            if not originalPalletColors[object] then
+                originalPalletColors[object] = object.Color
+            end
+        end
+        if object:IsA("Beam") or object:IsA("Trail") then
+            lineObjects[object] = true
+            if not originalLineColors[object] then
+                originalLineColors[object] = object.Color
+            end
+        end
+    end
+
+    task.spawn(function()
+        local stack = workspace:GetChildren()
+        local processed = 0
+        while #stack > 0 do
+            local object = stack[#stack]
+            stack[#stack] = nil
+            if object then
+                registerObject(object)
+                local okChildren, children = pcall(function()
+                    return object:GetChildren()
+                end)
+                if okChildren and children then
+                    for _, child in ipairs(children) do
+                        stack[#stack + 1] = child
+                    end
+                end
+                processed = processed + 1
+                if processed % 250 == 0 then
+                    task.wait()
+                end
+            end
+        end
+    end)
+
+    workspace.DescendantAdded:Connect(registerObject)
+
+    local function setPallets(color)
+        for part in pairs(palletParts) do
+            if part and part.Parent and part.Color ~= color then
+                part.Color = color
+            end
+        end
+    end
+
+    local function restorePallets()
+        for part, color in pairs(originalPalletColors) do
+            if part and part.Parent then
+                part.Color = color
+            end
+        end
+    end
+
+    local function setLines(color)
+        for object in pairs(lineObjects) do
+            if object and object.Parent then
+                pcall(function()
+                    object.Color = ColorSequence.new(color)
+                end)
+            end
+        end
+    end
+
+    local function restoreLines()
+        for object, color in pairs(originalLineColors) do
+            if object and object.Parent then
+                pcall(function()
+                    object.Color = color
+                end)
+            end
+        end
+    end
+
+    --==========================================================
+    -- LOCAL SKY CUBE
+    --==========================================================
+
+    local SKY_SIZE = 1024
+    local SKY_WALL_THICKNESS = 2
+    local SKY_DEFAULT_COLOR = Color3.fromRGB(60, 120, 255)
+    local skyCubeFolder = nil
+    local skyCubeWalls = {}
+    local skyCubeConnection = nil
+    local skyCubeEnabled = false
+    local skyColor = SKY_DEFAULT_COLOR
+
+    pcall(function()
+        if _G.VSA_SkyCubeConnection then
+            _G.VSA_SkyCubeConnection:Disconnect()
+            _G.VSA_SkyCubeConnection = nil
+        end
+    end)
+    pcall(function()
+        local oldCube = workspace:FindFirstChild("VSA_SkyboxCube")
+        if oldCube then oldCube:Destroy() end
+    end)
+
+    local function positionSkyCube(center)
+        local s = SKY_SIZE
+        for _, part in ipairs(skyCubeWalls) do
+            if part and part.Parent then
+                if part.Name == "WallRight" then
+                    part.CFrame = CFrame.new(center + Vector3.new(s, 0, 0))
+                elseif part.Name == "WallLeft" then
+                    part.CFrame = CFrame.new(center - Vector3.new(s, 0, 0))
+                elseif part.Name == "WallTop" then
+                    part.CFrame = CFrame.new(center + Vector3.new(0, s, 0))
+                elseif part.Name == "WallBottom" then
+                    part.CFrame = CFrame.new(center - Vector3.new(0, s, 0))
+                elseif part.Name == "WallFront" then
+                    part.CFrame = CFrame.new(center + Vector3.new(0, 0, s))
+                elseif part.Name == "WallBack" then
+                    part.CFrame = CFrame.new(center - Vector3.new(0, 0, s))
+                end
+            end
+        end
+    end
+
+    local function createSkyWall(name, size)
+        local part = Instance.new("Part")
+        part.Name = name
+        part.Size = size
+        part.Anchored = true
+        part.CanCollide = false
+        part.CanQuery = false
+        part.CanTouch = false
+        part.CastShadow = false
+        part.Material = Enum.Material.SmoothPlastic
+        part.Reflectance = 0
+        part.Color = skyColor
+        part.Transparency = 0
+        part.TopSurface = Enum.SurfaceType.Smooth
+        part.BottomSurface = Enum.SurfaceType.Smooth
+        part.Parent = skyCubeFolder
+        table.insert(skyCubeWalls, part)
+    end
+
+    local function removeSkyCube()
+        if skyCubeConnection then
+            skyCubeConnection:Disconnect()
+            skyCubeConnection = nil
+        end
+        _G.VSA_SkyCubeConnection = nil
+        if skyCubeFolder then
+            skyCubeFolder:Destroy()
+            skyCubeFolder = nil
+        end
+        table.clear(skyCubeWalls)
+        skyCubeEnabled = false
+    end
+
+    local function setSkyColor(color)
+        skyColor = color
+        for _, part in ipairs(skyCubeWalls) do
+            if part and part.Parent then
+                part.Color = color
+            end
+        end
+    end
+
+    local function createSkyCube()
+        if skyCubeFolder then return end
+        skyCubeFolder = Instance.new("Folder")
+        skyCubeFolder.Name = "VSA_SkyboxCube"
+        skyCubeFolder.Parent = workspace
+
+        local s = SKY_SIZE
+        local t = SKY_WALL_THICKNESS
+        createSkyWall("WallRight", Vector3.new(t, s * 2, s * 2))
+        createSkyWall("WallLeft", Vector3.new(t, s * 2, s * 2))
+        createSkyWall("WallTop", Vector3.new(s * 2, t, s * 2))
+        createSkyWall("WallBottom", Vector3.new(s * 2, t, s * 2))
+        createSkyWall("WallFront", Vector3.new(s * 2, s * 2, t))
+        createSkyWall("WallBack", Vector3.new(s * 2, s * 2, t))
+
+        skyCubeEnabled = true
+        local camera = workspace.CurrentCamera
+        positionSkyCube(camera and camera.CFrame.Position or Vector3.new(0, 100, 0))
+        skyCubeConnection = RunService.RenderStepped:Connect(function()
+            if not skyCubeEnabled or not skyCubeFolder then return end
+            local currentCamera = workspace.CurrentCamera
+            if currentCamera then
+                positionSkyCube(currentCamera.CFrame.Position)
+            end
+        end)
+        _G.VSA_SkyCubeConnection = skyCubeConnection
+    end
+
+    do
+        local sec = WorldTab:AddSection("Sky")
+        sec:AddToggle({
+            Name = "Enable Color Sky",
+            Default = false,
+            Callback = function(v)
+                if v then createSkyCube() else removeSkyCube() end
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Sky Color",
+            Default = skyColor,
+            Callback = function(color)
+                setSkyColor(color)
+            end
+        })
+    end
+
+    do
+        local sec = ObjectsTab:AddSection("Pallets")
+        sec:AddToggle({
+            Name = "Recolor Pallets",
+            Default = false,
+            Callback = function(v)
+                state.pallets = v
+                if v then setPallets(state.palletColor) else restorePallets() end
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Pallet Color",
+            Default = state.palletColor,
+            Callback = function(v)
+                state.palletColor = v
+                if state.pallets and not state.palletsRainbow then setPallets(v) end
+            end
+        })
+        sec:AddToggle({
+            Name = "Rainbow Pallets",
+            Default = false,
+            Callback = function(v)
+                state.palletsRainbow = v
+                if v then
+                    state.pallets = true
+                    setPallets(Color3.fromHSV((palletTime * state.palletSpeed) % 1, 1, 1))
+                else
+                    setPallets(state.palletColor)
+                end
+            end
+        })
+        sec:AddSlider({
+            Name = "Pallet RGB Speed",
+            Min = 1,
+            Max = 100,
+            Default = 15,
+            Increment = 1,
+            Callback = function(v)
+                state.palletSpeed = v / 100
+            end
+        })
+    end
+
+    do
+        local sec = ObjectsTab:AddSection("Grab Lines")
+        sec:AddToggle({
+            Name = "Recolor Grab Lines",
+            Default = false,
+            Callback = function(v)
+                state.lines = v
+                if v then setLines(state.lineColor) else restoreLines() end
+            end
+        })
+        sec:AddColorPicker({
+            Name = "Grab Line Color",
+            Default = state.lineColor,
+            Callback = function(v)
+                state.lineColor = v
+                if state.lines and not state.linesRainbow then setLines(v) end
+            end
+        })
+        sec:AddToggle({
+            Name = "Rainbow Grab Lines",
+            Default = false,
+            Callback = function(v)
+                state.linesRainbow = v
+                if v then state.lines = true else setLines(state.lineColor) end
+            end
+        })
+        sec:AddSlider({
+            Name = "Line RGB Speed",
+            Min = 1,
+            Max = 100,
+            Default = 12,
+            Increment = 1,
+            Callback = function(v)
+                state.lineSpeed = v / 100
+            end
+        })
+    end
+
+    --==========================================================
+    -- INTERFACE / HUD CONTROLS
+    --==========================================================
+
+    do
+        local sec = InterfaceTab:AddSection("Floating Menu")
+        sec:AddToggle({
+            Name = "Floating VSA Button",
+            Default = true,
+            Callback = function(v)
+                state.floatingButton = v
+                if floatingButton then
+                    floatingButton.Visible = v
+                end
+            end
+        })
+        sec:AddToggle({
+            Name = "Top HUD",
+            Default = true,
+            Callback = function(v)
+                state.hudEnabled = v
+                if topBar then topBar.Visible = v end
+                if statusText then statusText.Visible = v end
+            end
+        })
+        sec:AddParagraph({
+            Title = "Hotkeys",
+            Content = "G = Aura | H = Sakura | J = Wings | K = Halo | L = Toggle FX | RightControl = Hide/Show menu"
+        })
+    end
+
+    -- Built-in theme / scale / keybind / config tab from the library
+    Window:AddSettingsTab({ Name = "Settings", Icon = "⚙" })
+
+    --==========================================================
+    -- PRESETS
+    --==========================================================
+
+    local function applyPreset(name)
+        if name == "Select Preset" then return end
+        state.allFX = true
+
+        if name == "Sakura Dream" then
+            state.accessoryStyle = "Sakura Pins"
+            state.accessories = true
+            state.accessoryColor = C.Sakura
+            state.accessoryRainbow = false
+            state.aura = true
+            state.auraRainbow = false
+            state.auraColor = C.Sakura
+            state.sakura = true
+            state.sakuraColor = C.LightPink
+            state.wings = false
+            state.halo = true
+            state.haloRainbow = false
+            state.haloColor = C.Gold
+            state.hearts = true
+            state.runes = false
+            state.galaxy = false
+            state.outline = true
+            state.outlineRainbow = false
+            state.outlineColor = C.Sakura
+            Window:SetTheme("Pink")
+
+        elseif name == "Galaxy Angel" then
+            state.accessoryStyle = "Angel Halo"
+            state.accessories = true
+            state.aura = true
+            state.auraRainbow = true
+            state.sakura = false
+            state.wings = true
+            state.wingsRainbow = true
+            state.halo = true
+            state.haloRainbow = true
+            state.hearts = false
+            state.runes = false
+            state.galaxy = true
+            state.outline = true
+            state.outlineRainbow = true
+            Window:SetTheme("Purple")
+
+        elseif name == "Neon Spirit" then
+            state.accessoryStyle = "Fox Ears"
+            state.accessories = true
+            state.accessoryRainbow = true
+            state.aura = true
+            state.auraRainbow = true
+            state.sakura = false
+            state.wings = true
+            state.wingsRainbow = true
+            state.halo = true
+            state.haloRainbow = true
+            state.hearts = false
+            state.runes = true
+            state.galaxy = true
+            state.outline = true
+            state.outlineRainbow = true
+            Window:SetTheme("Cyan")
+
+        elseif name == "Rose Gold" then
+            state.accessoryStyle = "Purple Bows"
+            state.accessories = true
+            state.accessoryColor = Color3.fromRGB(230, 165, 145)
+            state.accessoryRainbow = false
+            state.aura = true
+            state.auraRainbow = false
+            state.auraColor = Color3.fromRGB(230, 165, 145)
+            state.sakura = true
+            state.sakuraColor = Color3.fromRGB(255, 210, 195)
+            state.wings = false
+            state.halo = true
+            state.haloRainbow = false
+            state.hearts = true
+            state.runes = false
+            state.galaxy = false
+            state.outline = true
+            state.outlineRainbow = false
+            state.outlineColor = Color3.fromRGB(230, 165, 145)
+            Window:SetTheme("Orange")
+        end
+
+        if state.accessories then createAccessories() else clearAccessories() end
+        if state.aura then createAura() else clearAura() end
+        if state.sakura then createPetals() else clearPetals() end
+        if state.wings then createWings() else clearWings() end
+        if state.halo then createHalo() else clearHalo() end
+
+        if state.hearts then
+            createOrbiters("Hearts", 8, state.heartsColor)
+        elseif state.runes then
+            createOrbiters("Runes", 8, state.runesColor)
+        elseif state.galaxy then
+            createOrbiters("Galaxy", 24, state.galaxyColor)
+        else
+            clearOrbiters()
+        end
+
+        if state.outline then createOutline() else clearOutline() end
+
+        updateAccessories()
+        updateAura()
+
+        notify("VSA Preset", "Applied " .. name)
+    end
+
+    do
+        local sec = Presets:AddSection("Appearance Presets")
+        sec:AddDropdown({
+            Name = "Choose Preset",
+            Default = "Select Preset",
+            Options = { "Select Preset", "Sakura Dream", "Galaxy Angel", "Neon Spirit", "Rose Gold" },
+            Callback = applyPreset
+        })
+        sec:AddButton({
+            Name = "Sakura Dream",
+            Callback = function() applyPreset("Sakura Dream") end
+        })
+        sec:AddButton({
+            Name = "Galaxy Angel",
+            Callback = function() applyPreset("Galaxy Angel") end
+        })
+        sec:AddButton({
+            Name = "Neon Spirit",
+            Callback = function() applyPreset("Neon Spirit") end
+        })
+        sec:AddButton({
+            Name = "Rose Gold",
+            Callback = function() applyPreset("Rose Gold") end
+        })
+    end
+
+    --==========================================================
+    -- SAVE / LOAD CONFIGS (custom VSA state, independent of library flags)
+    --==========================================================
+
+    local configFolder = "VSA/Configs"
+    local configName = "SakuraDream"
+
+    local function cleanName(name)
+        return tostring(name or ""):gsub("[^%w_%-]", "")
+    end
+
+    local function fileAPIsAvailable()
+        return type(writefile) == "function"
+            and type(readfile) == "function"
+            and type(isfile) == "function"
+            and type(makefolder) == "function"
+    end
+
+    local function ensureConfigFolder()
+        pcall(function()
+            if type(isfolder) == "function" then
+                if not isfolder("VSA") then makefolder("VSA") end
+                if not isfolder(configFolder) then makefolder(configFolder) end
+            else
+                makefolder("VSA")
+                makefolder(configFolder)
+            end
+        end)
+    end
+
+    local function serializeState()
+        local data = {}
+        for key, value in pairs(state) do
+            if typeof(value) == "Color3" then
+                data[key] = colorArray(value)
+            elseif type(value) == "string"
+                or type(value) == "number"
+                or type(value) == "boolean" then
+                data[key] = value
+            end
+        end
+        return HttpService:JSONEncode(data)
+    end
+
+    local function saveConfig(name)
+        if not fileAPIsAvailable() then
+            notify("VSA", "This executor does not expose file APIs.")
+            return
+        end
+
+        name = cleanName(name)
+        if name == "" then
+            notify("VSA", "Enter a valid config name.")
+            return
+        end
+
+        local okSave, message = pcall(function()
+            ensureConfigFolder()
+            writefile(configFolder .. "/" .. name .. ".json", serializeState())
+        end)
+
+        notify("VSA", okSave and ("Saved " .. name) or tostring(message))
+    end
+
+    local function loadConfig(name)
+        if not fileAPIsAvailable() then
+            notify("VSA", "This executor does not expose file APIs.")
+            return
+        end
+
+        name = cleanName(name)
+        local path = configFolder .. "/" .. name .. ".json"
+
+        if name == "" or not isfile(path) then
+            notify("VSA", "Config not found.")
+            return
+        end
+
+        local success, data = pcall(function()
+            return HttpService:JSONDecode(readfile(path))
+        end)
+
+        if not success or type(data) ~= "table" then
+            notify("VSA", "Config file is invalid.")
+            return
+        end
+
+        for key, value in pairs(data) do
+            if state[key] ~= nil then
+                if typeof(state[key]) == "Color3" then
+                    state[key] = arrayColor(value, state[key])
+                elseif type(state[key]) == type(value) then
+                    state[key] = value
+                end
+            end
+        end
+
+        applyFog()
+        updateLightingEffects()
+
+        if state.accessories then createAccessories() else clearAccessories() end
+        if state.aura then createAura() else clearAura() end
+        if state.sakura then createPetals() else clearPetals() end
+        if state.wings then createWings() else clearWings() end
+        if state.halo then createHalo() else clearHalo() end
+        if state.outline then createOutline() else clearOutline() end
+        if state.trail then createTrail() else clearTrail() end
+
+        notify("VSA", "Loaded " .. name)
+    end
+
+    do
+        local sec = Presets:AddSection("Config Files")
+        sec:AddTextbox({
+            Name = "Config Name",
+            Default = configName,
+            Callback = function(v)
+                configName = v
+            end
+        })
+        sec:AddButton({
+            Name = "Save Current Settings",
+            Callback = function()
+                saveConfig(configName)
+            end
+        })
+        sec:AddButton({
+            Name = "Load Settings",
+            Callback = function()
+                loadConfig(configName)
+            end
+        })
+        sec:AddButton({
+            Name = "Delete Config",
+            Callback = function()
+                if type(delfile) ~= "function" or type(isfile) ~= "function" then
+                    notify("VSA", "File deletion is unavailable.")
+                    return
+                end
+
+                local name = cleanName(configName)
+                local path = configFolder .. "/" .. name .. ".json"
+
+                if name == "" or not isfile(path) then
+                    notify("VSA", "Config not found.")
+                    return
+                end
+
+                local deleted = pcall(function()
+                    delfile(path)
+                end)
+
+                notify("VSA", deleted and "Config deleted." or "Could not delete config.")
+            end
+        })
+    end
+
+    --==========================================================
+    -- GLOBAL FX AND RESET
+    --==========================================================
+
+    local function setAllFX(enabled)
+        state.allFX = enabled
+
+        if not enabled then
+            if auraPart then auraPart.Transparency = 1 end
+            if bloomEffect then bloomEffect.Enabled = false end
+            if colorCorrection then colorCorrection.Enabled = false end
+            if characterTrail then characterTrail.Enabled = false end
+            if characterHighlight then characterHighlight.Enabled = false end
+
+            for _, item in ipairs(petals) do
+                if item.part then item.part.Transparency = 1 end
+            end
+            for _, item in ipairs(wings) do
+                if item.part then item.part.Transparency = 1 end
+            end
+            for _, item in ipairs(haloParts) do
+                if item.part then item.part.Transparency = 1 end
+            end
+            for _, item in ipairs(orbiters) do
+                if item.part then item.part.Transparency = 1 end
+            end
+        else
+            updateAura()
+            updateLightingEffects()
+            if characterTrail then characterTrail.Enabled = true end
+            if characterHighlight then characterHighlight.Enabled = state.outline end
+
+            for _, item in ipairs(petals) do
+                if item.part then item.part.Transparency = 0 end
+            end
+            for _, item in ipairs(wings) do
+                if item.part then item.part.Transparency = 0 end
+            end
+            for _, item in ipairs(haloParts) do
+                if item.part then item.part.Transparency = 0 end
+            end
+            for _, item in ipairs(orbiters) do
+                if item.part then item.part.Transparency = 0 end
+            end
+        end
+
+        notify("VSA", enabled and "Visual effects enabled." or "Visual effects hidden.")
+    end
+
+    do
+        local sec = Utilities:AddSection("Global Controls")
+        sec:AddToggle({
+            Name = "Enable / Disable All FX",
+            Default = true,
+            Callback = setAllFX
+        })
+    end
+
+    local function resetAll()
+        state.allFX = true
+
+        state.fog = false
+        state.fogColor = originalFog.Color
+        state.fogStart = originalFog.Start
+        state.fogEnd = originalFog.End
+        applyFog()
+
+        state.bloom = false
+        state.colorCorrection = false
+        updateLightingEffects()
+
+        state.pallets = false
+        state.palletsRainbow = false
+        restorePallets()
+
+        state.lines = false
+        state.linesRainbow = false
+        restoreLines()
+
+        state.accessories = false
+        state.accessoryStyle = "Sakura Pins"
+        state.accessoryColor = C.Sakura
+        state.accessoryRainbow = false
+        clearAccessories()
+
+        state.aura = false
+        state.auraRainbow = false
+        clearAura()
+
+        state.sakura = false
+        clearPetals()
+
+        state.wings = false
+        state.wingsRainbow = false
+        clearWings()
+
+        state.halo = false
+        clearHalo()
+
+        state.hearts = false
+        state.runes = false
+        state.galaxy = false
+        clearOrbiters()
+
+        state.afterimage = false
+        clearAfterimages()
+
+        state.trail = false
+        state.trailRainbow = false
+        clearTrail()
+
+        state.outline = false
+        state.outlineRainbow = false
+        clearOutline()
+
+        state.speedHUD = false
+        state.jumpIndicator = false
+        state.landingEffect = false
+
+        state.thirdPerson = false
+        resetCamera()
+
+        if speedText then speedText.Visible = false end
+        if jumpText then jumpText.Visible = false end
+
+        setAllFX(true)
+        notify("VSA", "Settings reset. Individual effects are OFF.")
+    end
+
+    do
+        local sec = Utilities:AddSection("Reset")
+        sec:AddButton({
+            Name = "RESET ALL SETTINGS",
+            Callback = resetAll
+        })
+    end
+
+    --==========================================================
+    -- HOTKEYS
+    --==========================================================
+
+    local function toggleAura()
+        state.aura = not state.aura
+        if state.aura then createAura() else clearAura() end
+    end
+
+    local function toggleSakura()
+        state.sakura = not state.sakura
+        if state.sakura then createPetals() else clearPetals() end
+    end
+
+    local function toggleWings()
+        state.wings = not state.wings
+        if state.wings then createWings() else clearWings() end
+    end
+
+    local function toggleHalo()
+        state.halo = not state.halo
+        if state.halo then createHalo() else clearHalo() end
+    end
+
+    UserInputService.InputBegan:Connect(function(input, processed)
+        if processed then
+            return
+        end
+
+        if input.KeyCode == Enum.KeyCode.G then
+            toggleAura()
+            notify("VSA", "Aura " .. (state.aura and "ON" or "OFF"))
+        elseif input.KeyCode == Enum.KeyCode.H then
+            toggleSakura()
+            notify("VSA", "Sakura " .. (state.sakura and "ON" or "OFF"))
+        elseif input.KeyCode == Enum.KeyCode.J then
+            toggleWings()
+            notify("VSA", "Wings " .. (state.wings and "ON" or "OFF"))
+        elseif input.KeyCode == Enum.KeyCode.K then
+            toggleHalo()
+            notify("VSA", "Halo " .. (state.halo and "ON" or "OFF"))
+        elseif input.KeyCode == Enum.KeyCode.L then
+            setAllFX(not state.allFX)
+        end
+    end)
+
+    --==========================================================
+    -- ANIMATED NOTIFICATIONS (custom toast on HUD)
+    --==========================================================
+
+    local function animatedNotice(message)
+        if not hudGui then
+            notify("VSA", message)
+            return
+        end
+
+        local toast = Instance.new("TextLabel")
+        toast.Size = UDim2.fromOffset(280, 42)
+        toast.Position = UDim2.new(1, 300, 1, -75)
+        toast.BackgroundColor3 = currentTheme.panel
+        toast.TextColor3 = currentTheme.text
+        toast.Text = "🌸  " .. message
+        toast.Font = Enum.Font.GothamBold
+        toast.TextSize = 13
+        toast.Parent = hudGui
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 10)
+        corner.Parent = toast
+
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = currentTheme.accent
+        stroke.Parent = toast
+
+        local enter = TweenService:Create(
+            toast,
+            TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+            { Position = UDim2.new(1, -300, 1, -75) }
+        )
+        enter:Play()
+
+        task.delay(2.2, function()
+            if toast and toast.Parent then
+                local exit = TweenService:Create(
+                    toast,
+                    TweenInfo.new(0.25),
+                    {
+                        Position = UDim2.new(1, 300, 1, -75),
+                        TextTransparency = 1,
+                        BackgroundTransparency = 1
+                    }
+                )
+                exit:Play()
+                exit.Completed:Connect(function()
+                    if toast then toast:Destroy() end
+                end)
+            end
+        end)
+    end
+
+    do
+        local sec = Utilities:AddSection("Test")
+        sec:AddButton({
+            Name = "Test Animated Notification",
+            Callback = function()
+                animatedNotice("VSA is ready!")
+            end
+        })
+    end
+
+    --==========================================================
+    -- RESPAWN HANDLER
+    --==========================================================
+
+    local function onCharacterAdded(character)
+        task.wait(1)
+        if state.accessories then createAccessories() end
+        if state.aura then createAura() end
+        if state.sakura then createPetals() end
+        if state.wings then createWings() end
+        if state.halo then createHalo() end
+        if state.outline then createOutline() end
+        if state.trail then createTrail() end
+        hookLanding(character)
+    end
+
+    Player.CharacterAdded:Connect(onCharacterAdded)
+
+    --==========================================================
+    -- FPS / PING / MAIN UPDATE
+    --==========================================================
+
+    local frameCount = 0
+    local fpsTimer = 0
+    local fps = 0
+    local ping = "--"
+    local pingTimer = 0
+    local statusTimer = 0
+    local effectUpdateTimer = 0
+    local effectUpdateInterval = 1 / 30
+
+    local function readPing()
+        local success, result = pcall(function()
+            local network = Stats:FindFirstChild("Network")
+            local serverStats = network and network:FindFirstChild("ServerStatsItem")
+            local pingItem = serverStats and serverStats:FindFirstChild("Data Ping")
+            return pingItem and pingItem:GetValueString()
+        end)
+        return success and result and tostring(result) or "--"
+    end
+
+    RunService.Heartbeat:Connect(function(dt)
+        frameCount = frameCount + 1
+        fpsTimer = fpsTimer + dt
+        pingTimer = pingTimer + dt
+        statusTimer = statusTimer + dt
+
+        if fpsTimer >= 1 then
+            fps = math.floor(frameCount / fpsTimer)
+            frameCount = 0
+            fpsTimer = 0
+        end
+
+        if pingTimer >= 1 then
+            ping = readPing()
+            pingTimer = 0
+            if statsText then
+                statsText.Text = string.format("FPS %d | Ping %s", fps, ping)
+            end
+        end
+
+        if statusTimer >= 0.2 then
+            statusTimer = 0
+            if statusText then
+                statusText.Text = "  VSA | FX " .. (state.allFX and "ON" or "OFF")
+            end
+            if speedText then
+                local root = getRoot()
+                if root then
+                    local velocity = root.AssemblyLinearVelocity
+                    local speed = Vector3.new(velocity.X, 0, velocity.Z).Magnitude
+                    speedText.Text = string.format("SPEED %.1f", speed)
+                end
+            end
+            if jumpText then
+                local character = Player.Character
+                local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    jumpText.Text = humanoid.FloorMaterial == Enum.Material.Air
+                        and "AIRBORNE" or "GROUND"
+                end
+            end
+        end
+
+        effectUpdateTimer = effectUpdateTimer + dt
+        if effectUpdateTimer >= effectUpdateInterval then
+            local effectDt = effectUpdateTimer
+            effectUpdateTimer = 0
+
+            if state.palletsRainbow then
+                palletTime = palletTime + effectDt
+                setPallets(Color3.fromHSV((palletTime * state.palletSpeed) % 1, 1, 1))
+            elseif state.pallets then
+                setPallets(state.palletColor)
+            end
+
+            if state.linesRainbow and state.allFX then
+                lineTime = lineTime + effectDt
+                setLines(Color3.fromHSV((lineTime * state.lineSpeed) % 1, 1, 1))
+            elseif state.lines then
+                setLines(state.lineColor)
+            end
+
+            if state.accessories and state.allFX then
+                accessoryTime = accessoryTime + effectDt
+                updateAccessories()
+            end
+
+            if state.aura then
+                auraTime = auraTime + effectDt
+                updateAura()
+            end
+
+            if state.sakura then
+                updatePetals(effectDt)
+            end
+
+            if state.wings and state.allFX then
+                wingTime = wingTime + effectDt
+                updateWings()
+            end
+
+            if state.halo then
+                haloTime = haloTime + effectDt
+                updateHalo()
+            end
+
+            if state.hearts or state.runes or state.galaxy then
+                orbitTime = orbitTime + effectDt
+                if state.galaxy then
+                    updateOrbiters("Galaxy", true, state.galaxyColor)
+                elseif state.runes then
+                    updateOrbiters("Runes", true, state.runesColor)
+                elseif state.hearts then
+                    updateOrbiters("Hearts", true, state.heartsColor)
+                end
+            end
+
+            if state.outline and characterHighlight then
+                outlineTime = outlineTime + effectDt
+                if state.outlineRainbow and state.allFX then
+                    local color = Color3.fromHSV((outlineTime * 0.15) % 1, 1, 1)
+                    characterHighlight.OutlineColor = color
+                    characterHighlight.FillColor = color
+                else
+                    characterHighlight.OutlineColor = state.outlineColor
+                    characterHighlight.FillColor = state.outlineColor
+                end
+                characterHighlight.Enabled = state.allFX
+            end
+
+            if state.trail and characterTrail then
+                if state.trailRainbow and state.allFX then
+                    trailTime = trailTime + effectDt
+                    state.trailColor = Color3.fromHSV((trailTime * 0.2) % 1, 1, 1)
+                end
+                characterTrail.Color = ColorSequence.new(state.trailColor)
+                characterTrail.Enabled = state.allFX
+            end
+
+            if state.afterimage and state.allFX then
+                afterimageTimer = afterimageTimer + effectDt
+                if afterimageTimer >= 0.12 then
+                    afterimageTimer = 0
+                    spawnAfterimage()
+                end
+            end
+        end
+
+        if topBar then
+            topBar.Visible = state.hudEnabled
+        end
+        if statusText then
+            statusText.Visible = state.hudEnabled
+        end
+        if floatingButton then
+            floatingButton.Visible = state.floatingButton
+        end
+        if speedText then
+            speedText.Visible = state.speedHUD
+        end
+        if jumpText then
+            jumpText.Visible = state.jumpIndicator
+        end
+    end)
+
+    --==========================================================
+    -- INITIALIZE
+    --==========================================================
+
+    task.defer(function()
+        task.wait(0.5)
+        buildHUD()
+        updateHUDTheme()
+
+        if Player.Character then
+            hookLanding(Player.Character)
+        end
+
+        animatedNotice("Anime / Sakura loaded!")
+    end)
+
+    notify(
+        "VSA",
+        "Loaded | G Aura | H Sakura | J Wings | K Halo | L FX | RightControl Menu"
+    )
+end)
+
+if not ok then
+    warn("[VSA] Error: " .. tostring(err))
+end
